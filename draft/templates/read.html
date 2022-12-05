@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block main_content %}
+<p>Click to <a href="{{ url_for('greet') }}">return to the greeting page</a>.</p>
+
+
+<h2>Here are the stories we have!</h2>
+<p>
+    <li>
+        <a href="{{ url_for('firstchapter') }}">I Know Why the Caged Bird Sings</a>
+
+
+    </li>
+</p>
+
+
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block main_content %}
+<p>Click to <a href="{{ url_for('greet') }}">return to the greeting page</a>.</p>
+
+<h1>I Know Why the Caged Bird Sings</h1>
+<div id="chapter_display">
+</div>
+
+<embed src="samplestory.txt">
+
+
+<p>Choose how the story progresses!</p>
+<nav>
+    <form id="readform" action="{{url_for('firstchapter')}}">
+        <button type="submit">1</button>
+    </form>
+
+    <br>
+
+    <form id="readform" action="{{url_for('firstchapter')}}">
+        <button type="submit">2</button>
+    </form>
+</nav>
+
+
+{% endblock %}
