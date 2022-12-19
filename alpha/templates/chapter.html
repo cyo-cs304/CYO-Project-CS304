@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block main_content %}
+
+
+<p>Click to <a href="{{url_for('greet')}}">return to the greeting page</a></p>
+
+
+<h1>{{chapter.chapter_title}}</h1>
+<h2>{{story.story_title}}</h2>
+
+<div id="chapter_display">
+</div>
+
+<p class="textdisplay"> {{text}} </p>
+
+<h2>Choose how the story progresses!</h2>
+
+
+<nav>
+    {% for choice in choices %}
+    <li><br><a href="{{ url_for('loadchapter', chapterID=choice.chapter_redirect)}}">{{choice.description_text}}</a>
+    </li><br>
+    {% endfor %}
+
+</nav>
+
+
+{% endblock %}

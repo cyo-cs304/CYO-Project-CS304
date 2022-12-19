@@ -1,0 +1,118 @@
+
+/* affects the flashing messages at the top of the screen */
+#message-text{
+    color: purple;
+    font-style: italic;
+    background-color: white;
+    border-radius: 12px;
+    display: inline;
+    padding: 7px; 
+    margin: 10px;
+    margin-bottom: 35px;
+}
+
+/* affects the color of all links */
+a{
+    text-emphasis-color: #ccffff;
+    color: #ccffff;
+}
+
+body {
+
+    background-color: black;
+}
+
+/* heading styling*/
+h1, h2, h4{
+    font-size: 300%;
+    color: #8253DF;
+    font-family: 'VT323', monospace; 
+    align:center;
+    align-items: center;
+    background-color: white;
+    display:inline;
+    padding: 9 px;
+    border-radius: 12 px;
+}
+
+
+/* longer lines of text will have a white background w black text for readability */
+.textdisplay{
+    align:center;
+    background-color: white;
+    border-style: solid;
+    display: block;
+    margin-top: 100px;
+    padding: 20px;
+    width: 500px;
+    color: black;
+    margin-left: 450px;
+    margin-right: 600px; 
+    margin-bottom: 40px;
+    
+  }
+
+.textdisplay2{
+    align:center;
+    background-color: white;
+    border-style: solid;
+    display: block;
+    margin-top: 400px;
+    padding: 20px;
+    width: 600px;
+    color: black;
+    margin-left: 550px;
+    margin-right: 550px; 
+    margin-bottom: 40px;
+    
+  }
+
+
+  p { 
+    color: white;
+    
+}
+
+  /* trying to center h1 headings */
+.heading{
+    margin-top: 50px;
+    margin-bottom: 50px;
+    position: absolute;
+    float: left;
+}
+
+/* forms for login and create account on the main.html page*/
+#loginform, #joinform {
+    border: 2px solid #8253DF;
+    padding: 25px;
+    text-align: center;
+    
+}
+
+#formdiv {
+    display: block;
+    margin-left: auto;
+    margin-right: auto 
+}
+
+/* image on main.html */
+#logo{
+    margin-top: 100px;
+    margin-left: 550px;
+
+}
+
+#small-logo{
+    margin-left: 900px;
+
+}
+/* affects all buttons*/
+.buttons {
+    border: 2px solid #8253DF;
+    background-color: #ccffff;
+    border-radius: 1ex;
+    padding: 2ex;
+    font-size: 1.5em;
+    font-family: 'VT323', monospace;
+}
+

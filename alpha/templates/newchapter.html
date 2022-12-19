@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block main_content %}
+<p>Click to <a href="{{ url_for('greet')}}">return to the greeting page</a>.</p>
+
+
+<h2>New Chapter</h2>
+<div class="form">
+    <form method="POST" action="{{url_for('newchapter')}}">
+
+        <p><label>Choose from your your stories:
+                <select>
+                    <option>Choose One</option>
+                    {% for s in stories %}
+                    <option value="{{s.story_id}}">{{s.story_title}}</option>
+                    {% endfor %}
+                </select></label>
+            <br>
+            <br>
+            <label for="chapter_title"> Chapter Title: </label><br>
+            <textarea id="chapter_title" name="chapter_title"></textarea><br>
+
+        <p>
+            <label for="chapter_content" name="chapter_content"> Start writing here: </label> <br>
+            <textarea id="chapter_content" rows="10" cols="120" name="chapter_content"></textarea>
+        </p>
+        <p><input class="buttons" type="submit" value="Add New Chapter(s)!" action="{{url_for('newchapter')}}"></p>
+    </form>
+    </p>
+</div>
+
+</html>
+
+{% endblock %}

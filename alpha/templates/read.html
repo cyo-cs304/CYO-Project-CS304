@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block main_content %}
+
+<p>Click to <a href="{{url_for('greet')}}">return to the greeting page</a></p>
+
+
+<h2>Here are the stories we have!</h2>
+<p>
+    <li>
+        {% for story in stories %}
+    <li><a href="{{url_for('loadstory', storyID=story.story_id)}}">{{story.story_title}}, by user
+            {{story.author_username}}</a></li>
+    {% endfor %}
+    </li>
+</p>
+
+{% endblock %}

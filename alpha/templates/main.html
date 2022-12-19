@@ -1,0 +1,31 @@
+{% block main_content %}
+
+
+<!-- <h1>Welcome to Web Tales!</h1> -->
+
+
+<img id="logo" src="../static/logo_cyo.png" width="400" height="300">
+
+<p>Please login or join, using one of the forms below:</p>
+<div id="formdiv">
+    <div id="joinformdiv">
+        <form id="joinform" action="{{url_for('join')}}" method="post">
+            <h2>Join</h2><br>
+            <p><label><input type="text" name="username" required pattern="^\w+$"> Username</label></p>
+            <p><label><input type="password" name="password1" required> Password </label></p>
+            <p><label><input type="password" name="password2" required> Password</label></p><br>
+            <p><button class="buttons" type="submit">Submit</button></p>
+        </form>
+    </div>
+
+    <div id="loginformdiv">
+        <form id="loginform" action="{{url_for('login')}}" method="post">
+            <h2>Login</h2><br>
+            <p><label><input type="text" name="username" required pattern="^\w+$"> Username</label></p>
+            <p><label><input type="password" name="password" required></label> Password</p><br>
+            <p><button class="buttons" type="submit">Submit</button></p>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

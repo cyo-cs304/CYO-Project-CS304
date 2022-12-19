@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+
+{% block main_content %}
+
+
+<p>Click to <a href="{{ url_for('index') }}">return to the login page</a>.</p>
+
+</nav>
+<p>Here you can choose if you want to:</p>
+<nav>
+    <form action="{{url_for('write')}}">
+        <button class="buttons" type="submit">Start writing a new story</button>
+    </form>
+    <br>
+    <form action="{{url_for('newchapter', storyID=None, method='GET')}}">
+        <button class="buttons" type="submit">Add a new chapter to an existing story</button>
+    </form>
+</nav>
+
+
+{% endblock %}
