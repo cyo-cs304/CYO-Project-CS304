@@ -1,0 +1,45 @@
+
+<!-- base.html for WebTales/CYO Adventure CS304 Project -->
+
+<!doctype html>
+<html lang='en'>
+
+<head>
+    {% block head_stuff %}
+    <meta charset='utf-8'>
+
+    <title>{{ page_title }}</title>
+    <link rel='stylesheet' href="../static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+
+    {% endblock %}
+</head>
+
+<body>
+
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div id="messages">
+        {% for msg in messages %}
+        <p id="message-text">{{msg}}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    {% block main_content %}
+    {% endblock %}
+
+    <script src="https://code.jquery.com/jquery.js"></script>
+    {% block jquery_scripts %}
+    <script>
+        console.log('jQuery loaded');
+    </script>
+    {% endblock %}
+
+</body>
+
+
+</html>

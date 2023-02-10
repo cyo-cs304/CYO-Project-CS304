@@ -1,0 +1,45 @@
+
+<!-- greet.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+
+{% block main_content %}
+
+<img id="small-logo" src="../static/logo_cyo.png" width="150" height="100" style="float: right">
+
+
+<p>Click to <a href="{{ url_for('index') }}">return to the login page</a>.</p>
+
+<h1 class="heading">Greetings {{name}}, Welcome to WebTales! </h1>
+<br>
+
+<p class="textdisplay">
+    This is a storytelling and game-designing platform that connects users. <br><br>
+    You will be able to write and share your story with others.
+    You will also be able to create story-games for other members
+    to explore. <br><br>
+    It will have all the features of a social media and
+    a user-friendly interface such as the story app Wattpad,
+    but hosting playable/interactive stories like the internet-dinosaur
+    chooseyourstory.com.
+</p>
+
+<p>Here you can choose if you want to:</p>
+<nav>
+    <form action="{{url_for('read')}}">
+        <button class="buttons" type="submit">READ</button>
+    </form>
+    <br>
+    <form action="{{url_for('write_options')}}">
+        <button class="buttons" type="submit">WRITE</button>
+    </form>
+</nav>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+{% endblock %}

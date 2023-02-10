@@ -1,0 +1,33 @@
+<!-- write.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+
+<p>Click to <a href="{{url_for('greet')}}">return to the greeting page</a></p>
+
+
+<h2>Ready to share your story?</h2>
+
+<div class="form">
+    <form method="POST" action="{{url_for('write')}}">
+        <p><label for="title"> Story Title </label><br>
+            <input type="text" name="story_title"><br> <br></p>
+
+        <p><label for="synopsis"> Synopsis: </label><br>
+            <textarea id="synopsis" rows="3" cols="60" name="synopsis"></textarea><br> <br></p>
+
+        <p><label for="genre"> Genre </label><br>
+            <input type="text" id="genre" name="genre"><br> <br></p>
+        <p><input class="buttons" type="submit" name="submit" value="Create Story"></p>
+    </form>
+    </p>
+</div>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+{% endblock %}

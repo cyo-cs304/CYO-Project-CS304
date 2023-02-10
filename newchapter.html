@@ -1,0 +1,45 @@
+
+<!-- newchapter.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+<p>Click to <a href="{{ url_for('greet')}}">return to the greeting page</a>.</p>
+
+
+<h2>New Chapter</h2>
+<div class="form">
+    <form method="POST" action="{{url_for('newchapter')}}">
+
+        <p><label>Choose from your stories :
+                <select id="storyID" name="storyID">
+                    <option>Choose One</option>
+                    {% for story in stories %}
+                    <option value="{{story.story_id}}" name="storyID">{{story.story_title}}</option>
+                    {% endfor %}
+                </select>
+                <p> or click to <a href="{{ url_for('write')}}">start writing a new story</a></p>
+            </label>
+        <p>
+            <label for="chapter_title"> Chapter Title: </label><br>
+            <textarea id="chapter_title" name="chapter_title"></textarea><br>
+        </p>
+        <p>
+            <label for="chapter_content" name="chapter_content"> Start writing here: </label> <br>
+            <textarea id="chapter_content" rows="10" cols="120" name="chapter_content"></textarea>
+        </p>
+        <p><input class="buttons" type="submit" value="Add New Chapter(s)!"
+                action="{{url_for('newchapter',storyID=O, method='POST')}}"></p>
+
+    </form>
+    </p>
+</div>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+
+{% endblock %}

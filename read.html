@@ -1,0 +1,34 @@
+<!-- read.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+
+<p>Click to <a href="{{url_for('greet')}}">return to the greeting page</a></p>
+
+
+<h2>Here are the stories we have!</h2>
+<p>
+    <li>
+        {% for story in stories %}
+    <li><a href="{{url_for('loadstory', storyID=story.story_id)}}">{{story.story_title}}</a></li>
+    <p>Author: {{story.author_username}}<br>
+         Synopsis: {{story.synopsis}} <br>
+         Genre/Tags: {{story.genre}} <br>
+         Your saved progress: 
+         {% for storyWithProgress in progressByStory %}
+            <a href="{{url_for('loadchapter', chapterID=storyWithProgress.saved_progress if story.story_id == storyWithProgress.story_id else 0)}}"> {{'Chapter "'+storyWithProgress.chapter_title+'"' if story.story_id == storyWithProgress.story_id else pass}} </a>
+         {% endfor %}
+    </p>
+         <br>
+    {% endfor %}
+    </li>
+</p>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+{% endblock %}

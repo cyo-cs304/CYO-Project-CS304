@@ -1,0 +1,48 @@
+
+<!-- newchoicechapter.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+<p>Click to <a href="{{ url_for('greet')}}">return to the greeting page</a>.</p>
+
+<h2>New Choice</h2>
+<div class="form">
+    <form method="POST" action="{{url_for('newchoice', storyID=0)}}">
+        <p><label>Choose which chapter in your story will host that Choice:
+                <select for="hostChapterID" id="hostChapterID" name="hostChapterID">
+                    <option>Choose One</option>
+                    {% for chapter in chapters %}
+
+                    <option value="{{chapter.chapter_id}}" name="chapterID">{{chapter.chapter_title}}</option>
+                    {% endfor %}
+                </select>
+                <p> or click to <a href="{{ url_for('newchapter',storyID=0)}}">start writing a new chapter</a></p>
+            </label>
+        <p><label for="choice_title" name="choice_title"> Type the choice text below: </label><br>
+            <textarea id="choice_title" name="choice_title"></textarea><br></p>
+
+
+        <p><label>Now, choose which chapter this choice will lead to if clicked.
+                If this is the last choice of your story so far, please select the first option:
+                <select for="redirectChapterID" id="redirectChapterID" name="redirectChapterID">
+                    <option>Choose One</option>
+                    <option value="0" name="defaultChoice">This choice does not lead to any chapter</option>
+                    {% for chapter in chapters %}
+                    <option value="{{chapter.chapter_id}}" name="chapterID">{{chapter.chapter_title}}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+        <p><input class="buttons" type="submit" value="Add New Choice!"></p>
+    </form>
+    </p>
+</div>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+{% endblock %}

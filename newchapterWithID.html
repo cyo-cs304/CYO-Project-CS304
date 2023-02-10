@@ -1,0 +1,36 @@
+
+<!-- newchapterWithID.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+<p>Click to <a href="{{ url_for('greet')}}">return to the greeting page</a>.</p>
+
+
+<h2>New Chapter</h2>
+<div class="form">
+    <form method="POST" action="{{url_for('newchapterWithID', storyID = newStory.story_id)}}">
+
+        <p>You are now adding a chapter to your story, "{{newStory.story_title}}".</p>
+        <p>Click to <a href="{{ url_for('newchapter')}}">add a chapter to another story</a>.
+            <br>
+            <br>
+            <label for="chapter_title" name="chapter_title"> Chapter Title: </label><br>
+            <textarea id="chapter_title" name="chapter_title"></textarea><br>
+        <p>
+            <label for="chapter_content" name="chapter_content"> Start writing here: </label> <br></p>
+        <textarea id="chapter_content" rows="10" cols="120" name="chapter_content"></textarea>
+        </p>
+        <p><input class="buttons" type="submit" value="Add New Chapter(s)!"
+                action="{{url_for('newchapterWithID', storyID=newStory.story_id)}}"></p>
+    </form>
+    </p>
+</div>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+{% endblock %}

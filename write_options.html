@@ -1,0 +1,31 @@
+<!-- write_options.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+
+
+<p>Click to <a href="{{ url_for('greet') }}">return to the login page</a>.</p>
+
+</nav>
+<p>Here you can choose if you want to:</p>
+<nav>
+    <form action="{{url_for('write')}}">
+        <button class="buttons" type="submit">Start writing a new story</button>
+    </form>
+    <br>
+    <form action="{{url_for('newchapter', method='GET')}}">
+        <button class="buttons" type="submit">Add a new chapter to an existing story</button>
+    </form>
+    <br>
+    <form action="{{url_for('newchoiceStory')}}">
+        <button class="buttons" type="submit"> Connect chapters through choices</button>
+    </form>
+</nav>
+
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+
+{% endblock %}

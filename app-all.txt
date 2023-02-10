@@ -1,0 +1,1216 @@
+# <!-- app.py for WebTales/CYO Adventure CS304 Project -->
+
+from flask import (Flask, render_template, make_response, url_for, request,
+                   redirect, flash, session, send_from_directory)
+app = Flask(__name__)
+
+import os
+import bcrypt
+import secrets
+import cs304dbi as dbi
+import cs304login as auth
+import webtales
+
+app.secret_key = 'your secret here'
+app.secret_key = secrets.token_hex() # replace that with a random key
+
+
+@app.route('/')
+def index():
+    return render_template('main.html', page_title='Welcome to WebTales')
+
+# I should probably call this "register" instead. Or some other synonym of "join"
+
+@app.route('/join/', methods=["POST"])
+def join():
+    """Adds the user's username and password to the userpass table based on their input in the form."""
+    username = request.form.get('username')
+    passwd1 = request.form.get('password1')
+    passwd2 = request.form.get('password2')
+    if passwd1 != passwd2:
+        flash('passwords do not match')
+        return redirect( url_for('index'))
+    conn = dbi.connect()
+    (uid, is_dup, other_err) = auth.insert_user(conn, username, passwd1)
+    if other_err:
+        raise other_err
+    if is_dup:
+        flash('Sorry; that username is taken')
+        return redirect(url_for('index'))
+    ## success
+    flash('FYI, you were issued UID {}'.format(uid))
+    session['username'] = username
+    session['uid'] = uid
+    session['logged_in'] = True
+    session['visits'] = 1
+    return redirect( url_for('user', username=username) )
+        
+@app.route('/login/', methods=["POST"])
+def login():
+    """Logs the user in based on their input in the form. This route checks if the input is already in the userpass table."""
+    username = request.form.get('username')
+    passwd = request.form.get('password')
+    conn = dbi.connect()
+    (ok, uid) = auth.login_user(conn, username, passwd)
+    if not ok:
+        flash('login incorrect, please try again or join')
+        return redirect(url_for('index'))
+    ## success
+    print('LOGIN', username)
+    flash('successfully logged in as '+username)
+    session['username'] = username
+    session['uid'] = uid
+    session['logged_in'] = True
+    session['visits'] = 1
+    return redirect( url_for('user', username=username) )
+
+@app.route('/greet/', methods=["GET", "POST"])
+def greet():
+    return render_template('greet.html', page_title='Welcome')
+
+@app.route('/user/<username>')
+def user(username):
+    """A route that gets the current username from the userpass table and displays it on the webpage"""
+    try:
+        # don't trust the URL; it's only there for decoration
+        username = session['username']
+        if 'username' in session:
+            username = session['username']
+            uid = session['uid']
+            session['visits'] = 1+int(session['visits'])
+            return render_template('greet.html',
+                                   page_title='Welcome {}, to WebTales'.format(username),
+                                   name=username,
+                                   uid=uid,
+                                   visits=session['visits'])
+        # else:
+        #     flash('you are not logged in. Please login or join')
+        #     return redirect( url_for('index') )
+    except Exception as err:
+        flash('some kind of error '+str(err))
+        return redirect( url_for('index') )  
+
+@app.route('/read/', methods=["GET", "POST"])
+def read():
+    if session.get('logged_in'):
+        conn = dbi.connect()
+        getAllStories = webtales.getStories(conn)
+        user = session.get('username')
+        progressByStory = webtales.getProgressByStory(conn, user)
+        return render_template('read.html', page_title='Our Stories', stories=getAllStories, progressByStory=progressByStory)
+    else:
+        flash('Please log in')
+        return redirect(url_for('index'))
+
+@app.route('/loadstory/<storyID>', methods=["GET","POST"])
+def loadstory(storyID):
+    if session.get('logged_in'):
+        conn = dbi.connect()
+        getStory = webtales.getOneStory(conn, storyID)
+        getChapters = webtales.getChapters(conn, storyID)
+        return render_template('story.html', page_title=getStory['story_title'], story=getStory, chapters=getChapters)
+    else:
+        flash('Please log in')
+        return redirect(url_for('index'))
+
+@app.route('/loadchapter/<chapterID>', methods=["GET", "POST"])
+def loadchapter(chapterID):
+    conn = dbi.connect()
+    user = session.get('username')
+    if session.get('logged_in'):
+        chapterInformation = webtales.getChapter(conn,chapterID)
+        # If a choice led to a chapter not written yet, run this:
+        if len(chapterInformation)==0:
+            flash('You are all caught up with this story. There are no more chapters available as for now!')
+            # hostStoryID = chapterInformation['story_id'] # gets the story_id from the host story
+            return redirect(url_for('read'))
+
+        # else, continue rendering the existing chapter:
+        webtales.updateProgress(conn, chapterID, user) # updates this user's progress in this story
+        chapterInformation = chapterInformation[0] # curs.fetchall() in webtales.py returned the dictionary inside a tuple
+        hostStoryID = chapterInformation['story_id']
+        hostStoryInfo = webtales.getOneStory(conn,hostStoryID)
+        chapterContent = webtales.getChapterContent(conn, chapterID)
+        choicesContent = webtales.getChoices(conn, chapterID)
+        return render_template('chapter.html', page_title=chapterInformation['chapter_title'], chapter=chapterInformation, story=hostStoryInfo, text= chapterContent, choices = choicesContent)
+    else:
+        flash('Please log in')
+        return redirect(url_for('index'))
+
+@app.route('/write_options/', methods=["GET", "POST"])
+def write_options():
+    if session.get('logged_in'):
+        return render_template('write_options.html', page_title='Choose what to write')
+    else:
+        flash('Please log in')
+        return redirect(url_for('index'))
+
+@app.route('/write/', methods=["GET", "POST"])
+def write():
+    if session.get('logged_in'):
+        if request.method == 'GET':
+            return render_template('write.html', title = 'Write Story')
+        else:
+            conn = dbi.connect()
+            story_title = request.form['story_title']
+            genre = request.form['genre']
+            synopsis = request.form['synopsis']
+            author_username = session.get('username')
+            # check if all info is filled out:
+            flag = False # initializing a flag as False
+            if story_title == '':
+                flash('missing input: Title is missing')
+                flag = True
+            if synopsis == '':
+                flash('missing input: Synopsis is missing')
+                flag = True
+            if genre == '':
+                flash('missing input: Genre is missing')
+                flag = True
+            if flag: # If any of the fields above are missing, rendering the template once will flash all relevant messages
+                return render_template('write.html', title = 'Write Story')
+            submit = request.form['submit']
+            if submit == "Create Story":
+                # Adding story to database, which returns the story_id of the newly added story
+                newStory = webtales.addStory(conn, story_title, author_username, genre, synopsis)
+                flash('Your story "{}" was saved successfully!'.format(story_title))
+                print(newStory['story_id'])
+                return render_template('newchapterWithID.html', newStory = newStory)
+            else:
+                return redirect(url_for('write'))
+    else:
+        flash('Please log in')
+        return redirect(url_for('index'))
+
+@app.route('/newchapter/', methods=["GET", "POST"])
+def newchapter():
+    if session.get('logged_in'):
+        conn = dbi.connect()
+        author_username = session.get('username')
+        allStories = webtales.getStories(conn, author_username= author_username)
+
+        if request.method == 'GET':
+            return render_template('newchapter.html', title = 'New Chapter', stories = allStories)
+        else:
+            storyID = request.form['storyID']
+            chapter_title = request.form['chapter_title']
+            chapter_content = request.form['chapter_content']
+
+            # check if all info is filled out
+            flag = False
+            if chapter_title == '':
+                flash('missing input: Title is missing')
+                flag = True
+            if chapter_content  == '':
+                flash('missing input: Story text is missing')
+                flag = True
+            if storyID == '':
+                flash('missing input: Please select a story')
+                flag = True
+            if flag:
+                return render_template('newchapter.html', title = 'New Chapter', stories = allStories)
+            
+        # Adding story to database, which returns the choice_id of the newly added choice
+            newChapter = webtales.addChapter(conn, storyID, chapter_title)
+            chapterInfo = webtales.getChapter(conn, newChapter)[0]
+            addingContent = webtales.contentFile(conn, chapterInfo, chapter_content)
+            flash('New chapter "{}" was saved successfully!'.format(chapter_title))
+            return render_template('newchapter.html', title = 'New Chapter', stories = allStories)
+    else:
+        flash('Please log in')
+        return redirect(url_for('index'))
+        
+@app.route('/newchapter/<storyID>', methods=["POST"])
+def newchapterWithID(storyID):
+    """
+    Renders a template to add a new chapter
+    to a just added story (does not use
+    a dropdown menu to select a story)
+    """
+    if session.get('logged_in'):
+        conn = dbi.connect()
+        author_username = session.get('username')
+        allStories = webtales.getStories(conn, author_username= author_username)
+        chapter_title = request.form['chapter_title']
+        chapter_content = request.form['chapter_content']
+        # check if all info is filled out
+        flag = False
+        if chapter_title == '':
+            flash('missing input: Title is missing')
+            flag = True
+        if chapter_content  == '':
+            flash('missing input: Story text is missing')
+            flag = True
+        if storyID == '':
+            flash('missing input: Please select a story')
+            flag = True
+        if flag:
+            return render_template('newchapter.html', title = 'New Chapter', stories = allStories)
+        
+        # Adding story to database, which returns the choice_id of the newly added choice
+        newChapter = webtales.addChapter(conn, storyID, chapter_title)
+        chapterInfo = webtales.getChapter(conn, newChapter)[0]
+        addingContent = webtales.contentFile(conn, chapterInfo, chapter_content)
+        flash('New chapter "{}" was saved successfully!'.format(chapter_title))
+        story = webtales.getOneStory(conn,storyID)
+        return render_template('newchapterWithID.html', title = 'New Chapter', newStory = story)
+    else:
+        flash('Please log in')
+        return redirect(url_for('index'))
+
+@app.route('/newchoiceStory/', methods=["GET","POST"])
+def newchoiceStory():
+    """
+    This function enables users to choose which story of their
+    authorship they want to add choices to
+    """
+    conn = dbi.connect()
+    author_username = session.get('username')
+    allStories = webtales.getStories(conn, author_username= author_username)
+    if session.get('logged_in'):
+        if request.method == 'GET':
+            return render_template('newchoice.html', title = 'New Chapter', stories = allStories)
+        else: # If method is POST:
+            storyID = request.form['storyID']
+            if request.form["submit"] == "Choose this story":
+                return redirect(url_for('newchoice', storyID=storyID))
+            else:
+                flash('Please select a story')
+                return render_template('newchoice.html', title = 'New Chapter', stories = allStories)
+
+    else:
+        flash('Please log in')
+        return redirect(url_for('index'))
+
+@app.route('/newchoice/<storyID>', methods=["GET","POST"])
+def newchoice(storyID):
+    """
+    This function allows users to connect 
+    two chapters through a choice
+    """
+    if session.get('logged_in'):
+        conn = dbi.connect()
+        author_username = session.get('username')
+        allStories = webtales.getStories(conn, author_username= author_username)
+
+        if request.method == 'GET':
+            allChapters= webtales.getChapters(conn, storyID)
+            return render_template('newchoicechapter.html', title = 'New Chapter', chapters=allChapters)
+        else: # If method is POST:
+            choice_title = request.form['choice_title']
+            hostChapterID = request.form['hostChapterID']
+            redirectChapterID = request.form['redirectChapterID']
+
+            # check if all info is filled out
+            flag = False
+            if choice_title == '':
+                flash('missing input: Choice description is missing')
+                flag = True
+            if hostChapterID == '':
+                flash('missing input: Please select a chapter that will host your choice')
+                flag = True
+            if redirectChapterID == '':
+                flash('missing input: Please select a chapter your choice will lead to')
+                flag = True
+            if flag:
+                return render_template('newchoiceStory.html', title = 'Select a story', stories=allStories)
+            
+        # Adding choice to database, which returns the chapter_id of the newly added chapter
+            newchoice = webtales.addChoice(conn, hostChapterID, choice_title, redirectChapterID)
+            # choiceInfo = webtales.getChoice(conn, newchoice)[0]
+            flash('New choice "{}" was saved successfully!'.format(choice_title))
+            return redirect(url_for('newchoiceStory'))
+    else:
+        flash('Please log in')
+        return redirect(url_for('index'))
+
+@app.route('/logout/')
+def logout():
+    if 'username' in session:
+        username = session['username']
+        session.pop('username')
+        session.pop('uid')
+        session.pop('logged_in')
+        flash('You are logged out')
+        return redirect(url_for('index'))
+    else:
+        flash('you are not logged in. Please login or join')
+        return redirect( url_for('index') )
+
+if __name__ == '__main__':
+    import sys,os
+    if len(sys.argv) > 1:
+        # arg, if any, is the desired port number
+        port = int(sys.argv[1])
+        assert(port>1024)
+    else:
+        port = os.getuid()
+    dbi.cache_cnf()             # use my personal database
+    conn = dbi.connect()
+    curs = dbi.dict_cursor(conn)
+    curs.execute('select database() as db')
+    row = curs.fetchone()
+    print('Connected to {}'.format(row['db']))
+    curs.execute('select uid, username, hashed from userpass')
+    print('You have the following users already')
+    for row in curs.fetchall():
+        print('{uid}\t{username}\t{hashed}'
+              .format(uid=row['uid'],
+                      username=row['username'],
+                      hashed=row['hashed']))
+    app.debug = True
+    app.run('0.0.0.0',port)# <!-- webtales.py for WebTales/CYO Adventure CS304 Project -->
+
+# WebTales/Choose your own Adventure python helper functions
+# Maria Cabrera, Annelle Abatoni, Ryan Rowe
+
+from flask import (Flask, render_template, make_response, request,
+                   redirect, flash, url_for, session)
+app = Flask(__name__)
+import cs304dbi as dbi
+import pymysql
+import bcrypt
+from datetime import date
+
+def getStories(conn, author_username=None):
+    """
+    Connects to the database and gets information
+    on all the stories available
+    """
+    curs = dbi.dict_cursor(conn)
+    if author_username == None:
+        curs.execute ('''select story_id, story_title, author_username, 
+        genre, synopsis from story''')
+    else:
+        curs.execute('''select story_id, story_title, author_username,
+        genre, synopsis from story
+        where author_username = %s''', [author_username])    
+    return curs.fetchall()
+
+def getOneStory(conn, storyID):
+    """
+    Connects to the database and gets information
+    on a Story given its ID
+    """
+    curs = dbi.dict_cursor(conn)
+    curs.execute('''select story_id, story_title, author_username,
+    genre, synopsis from story
+    where story_id = %s ''', [storyID])
+    return curs.fetchall()[0] #curs.fetchall() returns the dictionary inside a list, so we choose the 0 position: the dictionary
+
+def getStoryIDfromChapter(conn, chapterID):
+    """
+    Connects to the database to get the story_id
+    of a story given the chapter
+    """
+    Chapterid=  session['chapterID'] 
+    curs = dbi.cursor(conn)
+    curs.execute('''select story_id from chapter
+    where chapter_id = %s''', [Chapterid])
+    chapter = webtales.getChapter(conn, chapterID)
+    # chapter.story_id
+    chapter['story_id']
+    return curs.fetchall()[0]
+
+def addStory(conn, story_title, author_username, genre, synopsis):
+    """Adds stories to database 
+    given information from the write.html template
+    """
+    curs = dbi.cursor(conn)
+    curs.execute('''insert into story(story_title, author_username, genre, synopsis) 
+    values(%s,%s,%s,%s)''', [story_title, author_username, genre, synopsis])
+    conn.commit()
+    curs.execute('''select last_insert_id()''')
+    last_insert_story_id = curs.fetchone()[0]
+    return getOneStory(conn, last_insert_story_id) # addStory returns information from the story just added
+    
+def getChapters(conn, storyID):
+    """
+    Connects to the database and gets information
+    on the chapters of a Story given the storyID
+    """
+    curs = dbi.dict_cursor(conn)
+    curs.execute('''select chapter_id, story_id, chapter_title from chapter
+    where story_id = %s''', [storyID])
+    return curs.fetchall()
+
+def getChapter(conn, chapterID):
+    """
+    Connects to the database and gets information
+    on a specific chapter given its ID
+    """
+    curs = dbi.dict_cursor(conn)
+    curs.execute('''select chapter_id, story_id, chapter_title from chapter
+    where chapter_id = %s''', [chapterID])
+    return curs.fetchall()
+
+def getChapterContent(conn, chapterID):
+    """
+    Connects to the database to get the name of .txt file
+    and extracts its text content
+    """
+    curs = dbi.cursor(conn)
+    curs.execute(''' select chapter_content from chapter where chapter_id = %s''', [chapterID])
+    filepath = curs.fetchone()[0]
+    with open('/students/cyo/draft/story_texts/'+filepath) as f:
+        contents = f.readlines()[0]
+    return contents
+
+def updateProgress(conn, chapterID, author_username):
+    """
+    Connects to the database to update a user's progress
+    in a specific story
+    """
+    curs = dbi.cursor(conn)
+    storyID = getChapter(conn, chapterID)[0]['story_id']
+    curs.execute(''' INSERT INTO follow (username, story_id, saved_progress)
+    VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE
+    saved_progress = %s''', [author_username, storyID, chapterID, chapterID])
+    conn.commit()
+
+def getProgressByStory(conn, author_username):
+    """
+    Connects to the database to get the current user's 
+    progress in all stories they started playing,
+    grouped by each storyID
+    """
+    curs = dbi.dict_cursor(conn)
+    curs.execute('''select story_id, author_username, synopsis, genre, saved_progress from story
+    INNER JOIN follow using (story_id)
+    where username = %s''', [author_username])
+    # Your saved progress: {{progressByStory.saved_progress if story.story_id in progressByStory}}</p>
+
+    return curs.fetchall()
+    
+def addChapter(conn, storyID, chapter_title):
+    """Adds new chapter to database 
+    given information from the newchapter.html template
+    """
+    curs = dbi.cursor(conn)
+    if storyID == 0:
+        curs.execute('''select last_insert_id()''')
+        storyID = curs.fetchone()
+    curs.execute('''insert into chapter(story_id, chapter_title) 
+    values(%s,%s)''', [storyID, chapter_title])
+    conn.commit()
+
+    curs.execute('''select last_insert_id()''')
+    last_insert_chapter_id = curs.fetchone()
+    return last_insert_chapter_id # Getting the chapter_id of the newly inserted chapter
+
+def contentFile(conn, chapterInfo, chapterText):
+    """Gets the chapter content typed by user and dumps it in a .txt file located in
+     in /students/cyo/draft/story_texts
+    Then, it connects to the database to insert the .txt file name to the chapter table
+    """
+    currentDate = date.today()
+    chapterTitle = chapterInfo['chapter_title'].replace(' ','_') # Gets the current chapter's title and replaces spaces by _
+    chapterFileName = chapterTitle + "_" + str(currentDate)
+    filePath = "/students/cyo/draft/story_texts/"
+    print(filePath+chapterFileName)
+    with open(filePath+chapterFileName, 'w') as f:
+        f.writelines(chapterText)
+    # Now, we insert the name of .txt file in the chapter table
+    chapterID = chapterInfo['chapter_id']
+    curs = dbi.cursor(conn)
+    curs.execute('''update chapter 
+    set chapter_content = %s
+    where chapter_id = %s''', [chapterFileName, chapterID])
+    conn.commit()
+
+def getChoices(conn, chapterID):
+    """
+    Connects to the database to get a dictionary
+    of choices relative to a chapter
+    """
+    curs = dbi.dict_cursor(conn)
+    curs.execute(''' select * from choice where host_chapter = %s''', [chapterID])
+    choices = curs.fetchall()
+    return choices
+    
+def getChoice(conn, choiceID):
+    """
+    Connects to the database and gets information
+    on a specific choice given its ID
+    """
+    curs = dbi.dict_cursor(conn)
+    curs.execute('''select choice_id, host_chapter, description_text from choice
+    where choice_id = %s''', [choiceID])
+    return curs.fetchall()
+
+def addChoice(conn, chapterID, choice_title, chapter_redirect=0):
+    """Adds new choice to database 
+    given information from the newchoice.html template
+    """
+    curs = dbi.cursor(conn)
+    curs.execute('''insert into choice(host_chapter, description_text, chapter_redirect) 
+    values(%s,%s,%s)''', [chapterID, choice_title, chapter_redirect])
+    conn.commit()
+
+    curs.execute('''select last_insert_id()''')
+    last_insert_choice_id = curs.fetchone()
+    return last_insert_choice_id 
+
+if __name__ == '__main__':
+    conn = dbi.connect()
+    delete_user(conn, 'fred')
+    delete_user(conn, 'george')
+
+    for username in ['fred', 'george', 'fred']:
+        print(username, insert_user(conn, username, 'secret'))
+        print(username, login_user(conn, username, 'secret'))
+        
+-- <!-- ddl.sql for WebTales/CYO Adventure CS304 Project -->
+-- CS304 FA22 Project
+-- Annelle Abatoni, Ryan Rowe, Maria Moura
+
+use cyo_db;
+
+drop table if exists user;
+create table user(
+    userID int not null auto_increment,
+    username varchar(20),
+    email varchar(50),
+    passkey varchar(50), /* password */
+    PRIMARY KEY (userID)
+);
+
+drop table if exists story;
+create table story(
+    story_id int not null auto_increment,
+    story_title varchar(20),
+    author_username varchar(20), /* foreign key username from user table */
+    genre varchar(20),
+    synopsis varchar(200),
+    PRIMARY KEY (story_id)
+);
+
+drop table if exists follow;
+create table follow(
+    username varchar(20), /* foreign key from user table */
+    story_id int, /* foreign key from story table */
+    saved_progress int, /* foreign key chapter_id from chapter table */
+    user_rating enum('1', '2', '3', '4', '5'),
+    PRIMARY KEY (username, story_id)
+);
+
+drop table if exists chapter;
+create table chapter(
+    chapter_id int not null auto_increment,
+    story_id int, /* foreign key from story table */
+    chapter_title varchar(50),  
+    chapter_content varchar(50), /* name of a txt file that contains text to the story */
+    PRIMARY KEY (chapter_id)
+);
+
+drop table if exists choice;
+create table choice (
+    choice_id int not null auto_increment,
+    host_chapter int, /* foreign key chapter_id from chapter table */
+    description_text varchar(100),
+    chapter_redirect int, /* foreign key chapter_id from chapter table */
+    PRIMARY KEY (choice_id)
+);
+
+INSERT INTO story(story_id, story_title, author_username, genre, synopsis) 
+VALUES (123,'The last night', 'maria_m','drama','A touching story from Maya Angelou'); 
+
+INSERT INTO follow(username,story_id,saved_progress, user_rating) 
+VALUES ('follower_1',123,1,'4');
+
+INSERT INTO chapter(chapter_id, story_id, chapter_title, chapter_content) 
+VALUES (1,123,'First Chapter', 'samplestory.txt');
+
+INSERT INTO chapter(chapter_id, story_id, chapter_title, chapter_content) 
+VALUES (2,123,'Third Chapter', 'freemantrial.txt');
+
+INSERT INTO chapter(chapter_id, story_id, chapter_title, chapter_content) 
+VALUES (3,123,'Third Chapter', 'runaway.txt');
+
+INSERT INTO choice(choice_id, host_chapter, description_text, chapter_redirect)
+VALUES (1,1, 'Attend Mr. Freeman`s trial', 2);
+
+INSERT INTO choice(choice_id, host_chapter, description_text, chapter_redirect)
+VALUES (2,1, 'Run away with Bailey', 3);
+
+INSERT INTO choice(choice_id, host_chapter, description_text, chapter_redirect)
+VALUES (3,3, 'Tell Mom to come home', 0);
+
+INSERT INTO choice(choice_id, host_chapter, description_text, chapter_redirect)
+VALUES (4,2, 'Run from trial', 0);select * from userpass;
+-- <!-- userpass-recreate.sql for WebTales/CYO Adventure CS304 Project -->
+
+drop table if exists userpass;
+
+create table userpass(
+       uid int auto_increment,
+       username varchar(50) not null,
+       hashed char(60),
+       unique(username),
+       index(username),
+       primary key (uid)
+);
+
+<!-- base.html for WebTales/CYO Adventure CS304 Project -->
+
+<!doctype html>
+<html lang='en'>
+
+<head>
+    {% block head_stuff %}
+    <meta charset='utf-8'>
+
+    <title>{{ page_title }}</title>
+    <link rel='stylesheet' href="../static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+
+    {% endblock %}
+</head>
+
+<body>
+
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div id="messages">
+        {% for msg in messages %}
+        <p id="message-text">{{msg}}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    {% block main_content %}
+    {% endblock %}
+
+    <script src="https://code.jquery.com/jquery.js"></script>
+    {% block jquery_scripts %}
+    <script>
+        console.log('jQuery loaded');
+    </script>
+    {% endblock %}
+
+</body>
+
+
+</html>
+<!-- chapter.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+
+
+<p>Click to <a href="{{url_for('greet')}}">return to the greeting page</a></p>
+
+
+<h1>{{chapter.chapter_title}}</h1>
+<br>
+<br>
+<h2>{{story.story_title}}</h2>
+
+<div id="chapter_display">
+</div>
+
+<p class="textdisplay"> {{text}} </p>
+
+<h2>Choose how the story progresses!</h2>
+
+
+<nav>
+    {% for choice in choices %}
+    <li><br><a href="{{ url_for('loadchapter', chapterID=choice.chapter_redirect)}}">{{choice.description_text}}</a>
+    </li><br>
+    {% endfor %}
+
+</nav>
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+{% endblock %}
+<!-- greet.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+
+{% block main_content %}
+
+<img id="small-logo" src="../static/logo_cyo.png" width="150" height="100" style="float: right">
+
+
+<p>Click to <a href="{{ url_for('index') }}">return to the login page</a>.</p>
+
+<h1 class="heading">Greetings {{name}}, Welcome to WebTales! </h1>
+<br>
+
+<p class="textdisplay">
+    This is a storytelling and game-designing platform that connects users. <br><br>
+    You will be able to write and share your story with others.
+    You will also be able to create story-games for other members
+    to explore. <br><br>
+    It will have all the features of a social media and
+    a user-friendly interface such as the story app Wattpad,
+    but hosting playable/interactive stories like the internet-dinosaur
+    chooseyourstory.com.
+</p>
+
+<p>Here you can choose if you want to:</p>
+<nav>
+    <form action="{{url_for('read')}}">
+        <button class="buttons" type="submit">READ</button>
+    </form>
+    <br>
+    <form action="{{url_for('write_options')}}">
+        <button class="buttons" type="submit">WRITE</button>
+    </form>
+</nav>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+{% endblock %}<!-- main.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+{% block main_content %}
+<img id="logo" src="../static/logo_cyo.png" width="400" height="300">
+
+<p>Please login or join, using one of the forms below:</p>
+<div id="formdiv">
+    <div id="joinformdiv">
+        <form id="joinform" action="{{url_for('join')}}" method="post">
+            <h2>Join</h2><br>
+            <p><label><input type="text" name="username" required pattern="^\w+$"> Username</label></p>
+            <p><label><input type="password" name="password1" required> Password </label></p>
+            <p><label><input type="password" name="password2" required> Password</label></p><br>
+            <p><button class="buttons" type="submit">Submit</button></p>
+        </form>
+    </div>
+
+    <div id="loginformdiv">
+        <form id="loginform" action="{{url_for('login')}}" method="post">
+            <h2>Login</h2><br>
+            <p><label><input type="text" name="username" required pattern="^\w+$"> Username</label></p>
+            <p><label><input type="password" name="password" required></label> Password</p><br>
+            <p><button class="buttons" type="submit">Submit</button></p>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block jquery_scripts %}
+<script>
+    $("#joinform").on('submit', function (event) {
+        var pw1 = $(this).find('[name=password1]').val();
+        var pw2 = $(this).find('[name=password2]').val();
+        // should also check for length and common words etc
+        if (pw1 != pw2) {
+            // something more sophisticated than alert would be nice
+            alert("passwords don't match");
+        }
+    });
+</script>
+{% endblock %}
+<!-- newchapter.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+<p>Click to <a href="{{ url_for('greet')}}">return to the greeting page</a>.</p>
+
+
+<h2>New Chapter</h2>
+<div class="form">
+    <form method="POST" action="{{url_for('newchapter')}}">
+
+        <p><label>Choose from your stories :
+                <select id="storyID" name="storyID">
+                    <option>Choose One</option>
+                    {% for story in stories %}
+                    <option value="{{story.story_id}}" name="storyID">{{story.story_title}}</option>
+                    {% endfor %}
+                </select>
+                <p> or click to <a href="{{ url_for('write')}}">start writing a new story</a></p>
+            </label>
+        <p>
+            <label for="chapter_title"> Chapter Title: </label><br>
+            <textarea id="chapter_title" name="chapter_title"></textarea><br>
+        </p>
+        <p>
+            <label for="chapter_content" name="chapter_content"> Start writing here: </label> <br>
+            <textarea id="chapter_content" rows="10" cols="120" name="chapter_content"></textarea>
+        </p>
+        <p><input class="buttons" type="submit" value="Add New Chapter(s)!"
+                action="{{url_for('newchapter',storyID=O, method='POST')}}"></p>
+
+    </form>
+    </p>
+</div>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+
+{% endblock %}
+<!-- newchapterWithID.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+<p>Click to <a href="{{ url_for('greet')}}">return to the greeting page</a>.</p>
+
+
+<h2>New Chapter</h2>
+<div class="form">
+    <form method="POST" action="{{url_for('newchapterWithID', storyID = newStory.story_id)}}">
+
+        <p>You are now adding a chapter to your story, "{{newStory.story_title}}".</p>
+        <p>Click to <a href="{{ url_for('newchapter')}}">add a chapter to another story</a>.
+            <br>
+            <br>
+            <label for="chapter_title" name="chapter_title"> Chapter Title: </label><br>
+            <textarea id="chapter_title" name="chapter_title"></textarea><br>
+        <p>
+            <label for="chapter_content" name="chapter_content"> Start writing here: </label> <br></p>
+        <textarea id="chapter_content" rows="10" cols="120" name="chapter_content"></textarea>
+        </p>
+        <p><input class="buttons" type="submit" value="Add New Chapter(s)!"
+                action="{{url_for('newchapterWithID', storyID=newStory.story_id)}}"></p>
+    </form>
+    </p>
+</div>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+{% endblock %}
+<!-- newchoicechapter.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+<p>Click to <a href="{{ url_for('greet')}}">return to the greeting page</a>.</p>
+
+<h2>New Choice</h2>
+<div class="form">
+    <form method="POST" action="{{url_for('newchoice', storyID=0)}}">
+        <p><label>Choose which chapter in your story will host that Choice:
+                <select for="hostChapterID" id="hostChapterID" name="hostChapterID">
+                    <option>Choose One</option>
+                    {% for chapter in chapters %}
+
+                    <option value="{{chapter.chapter_id}}" name="chapterID">{{chapter.chapter_title}}</option>
+                    {% endfor %}
+                </select>
+                <p> or click to <a href="{{ url_for('newchapter',storyID=0)}}">start writing a new chapter</a></p>
+            </label>
+        <p><label for="choice_title" name="choice_title"> Type the choice text below: </label><br>
+            <textarea id="choice_title" name="choice_title"></textarea><br></p>
+
+
+        <p><label>Now, choose which chapter this choice will lead to if clicked.
+                If this is the last choice of your story so far, please select the first option:
+                <select for="redirectChapterID" id="redirectChapterID" name="redirectChapterID">
+                    <option>Choose One</option>
+                    <option value="0" name="defaultChoice">This choice does not lead to any chapter</option>
+                    {% for chapter in chapters %}
+                    <option value="{{chapter.chapter_id}}" name="chapterID">{{chapter.chapter_title}}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+        <p><input class="buttons" type="submit" value="Add New Choice!"></p>
+    </form>
+    </p>
+</div>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+{% endblock %}<!-- newchoicechapter.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+<p>Click to <a href="{{ url_for('greet')}}">return to the greeting page</a>.</p>
+
+
+<h2>New Choice</h2>
+<br>
+<br>
+<h2>Choose a story</h2>
+
+<div class="form">
+    <form method="POST" action="{{url_for('newchoiceStory')}}">
+        <p><label>Choose the story you want to add chapters to:
+                <select id="storyID" name="storyID">
+                    <option>Choose One</option>
+                    {% for story in stories %}
+                    <option value="{{story.story_id}}" name="storyID">{{story.story_title}}</option>
+                    {% endfor %}
+                </select></label>
+        <p><input class="buttons" type="submit" name="submit" value="Choose this story"></p>
+        </p>
+    </form>
+</div>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+{% endblock %}<!-- read.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+
+<p>Click to <a href="{{url_for('greet')}}">return to the greeting page</a></p>
+
+
+<h2>Here are the stories we have!</h2>
+<p>
+    <li>
+        {% for story in stories %}
+    <li><a href="{{url_for('loadstory', storyID=story.story_id)}}">{{story.story_title}}</a></li>
+    <p>Author: {{story.author_username}}<br>
+         Synopsis: {{story.synopsis}} <br>
+         Genre/Tags: {{story.genre}} <br>
+    <br>
+    {% endfor %}
+    </li>
+</p>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+{% endblock %}<!-- story.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+
+<p>Click to <a href="{{url_for('greet')}}">return to the greeting page</a></p>
+
+<h1>Title: {{story.story_title}}</h1><br>
+<h4>Author: {{story.author_username}}</h4> <br>
+<h4>Synopsis: {{story.synopsis}}</h4><br>
+
+<p> These are the chapters available for this story: </p>
+
+<p>
+    <li>
+        {% for onlychapter in chapters %}
+        <br>
+    <li><a href="{{url_for('loadchapter', chapterID=onlychapter.chapter_id)}}">{{onlychapter.chapter_title}}</a></li>
+    {% endfor %}
+    </li>
+</p>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+{% endblock %}<!-- write.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+
+<p>Click to <a href="{{url_for('greet')}}">return to the greeting page</a></p>
+
+
+<h2>Ready to share your story?</h2>
+
+<div class="form">
+    <form method="POST" action="{{url_for('write')}}">
+        <p><label for="title"> Story Title </label><br>
+            <input type="text" name="story_title"><br> <br></p>
+
+        <p><label for="synopsis"> Synopsis: </label><br>
+            <textarea id="synopsis" rows="3" cols="60" name="synopsis"></textarea><br> <br></p>
+
+        <p><label for="genre"> Genre </label><br>
+            <input type="text" id="genre" name="genre"><br> <br></p>
+        <p><input class="buttons" type="submit" name="submit" value="Create Story"></p>
+    </form>
+    </p>
+</div>
+
+<br>
+<br>
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+{% endblock %}<!-- write_options.html for WebTales/CYO Adventure CS304 Project -->
+
+{% extends "base.html" %}
+
+{% block main_content %}
+
+
+<p>Click to <a href="{{ url_for('greet') }}">return to the login page</a>.</p>
+
+</nav>
+<p>Here you can choose if you want to:</p>
+<nav>
+    <form action="{{url_for('write')}}">
+        <button class="buttons" type="submit">Start writing a new story</button>
+    </form>
+    <br>
+    <form action="{{url_for('newchapter', method='GET')}}">
+        <button class="buttons" type="submit">Add a new chapter to an existing story</button>
+    </form>
+    <br>
+    <form action="{{url_for('newchoiceStory')}}">
+        <button class="buttons" type="submit"> Connect chapters through choices</button>
+    </form>
+</nav>
+
+<br>
+<form action="{{url_for('logout')}}">
+    <input class="buttons" type="submit" value="Log Out">
+</form>
+
+{% endblock %}
+/* affects the flashing messages at the top of the screen */
+#message-text{
+    color: purple;
+    font-style: italic;
+    background-color: white;
+    border-radius: 12px;
+    display: inline;
+    padding: 7px; 
+    margin: 10px;
+    margin-bottom: 35px;
+}
+
+/* affects the color of all links */
+a{
+    text-emphasis-color: #ccffff;
+    color: #ccffff;
+}
+
+body {
+
+    background-color: black;
+}
+
+/* heading styling*/
+h1, h2, h4{
+    font-size: 300%;
+    color: #8253DF;
+    font-family: 'VT323', monospace; 
+    align:center;
+    align-items: center;
+    background-color: white;
+    display:inline;
+    padding: 9 px;
+    border-radius: 12 px;
+}
+
+
+/* longer lines of text will have a white background w black text for readability */
+.textdisplay{
+    align:center;
+    background-color: white;
+    border-style: solid;
+    display: block;
+    margin-top: 100px;
+    padding: 20px;
+    width: 500px;
+    color: black;
+    margin-left: 450px;
+    margin-right: 600px; 
+    margin-bottom: 40px;
+    
+  }
+
+.textdisplay2{
+    align:center;
+    background-color: white;
+    border-style: solid;
+    display: block;
+    margin-top: 400px;
+    padding: 20px;
+    width: 600px;
+    color: black;
+    margin-left: 550px;
+    margin-right: 550px; 
+    margin-bottom: 40px;
+    
+  }
+
+
+p { 
+    color: white;
+    
+}
+
+  /* trying to center h1 headings */
+.heading{
+    margin-top: 50px;
+    margin-bottom: 50px;
+    position: absolute;
+    float: left;
+}
+
+/* forms for login and create account on the main.html page*/
+#loginform, #joinform {
+    border: 2px solid #8253DF;
+    padding: 25px;
+    text-align: center;
+    
+}
+
+#formdiv {
+    display: block;
+    margin-left: auto;
+    margin-right: auto 
+}
+
+/* image on main.html */
+#logo{
+    margin-top: 100px;
+    margin-left: 550px;
+
+}
+
+#small-logo{
+    margin-left: 900px;
+
+}
+/* affects all buttons*/
+.buttons {
+    border: 2px solid #8253DF;
+    background-color: #ccffff;
+    border-radius: 1ex;
+    padding: 2ex;
+    font-size: 1.5em;
+    font-family: 'VT323', monospace;
+}
+
